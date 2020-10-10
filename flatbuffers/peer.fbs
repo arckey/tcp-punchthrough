@@ -1,0 +1,14 @@
+namespace peer;
+
+table Addr {
+    ip:[byte];
+    port:int;
+}
+
+table Peer {
+    name:string;
+    localAddr:Addr;
+    remoteAddr:Addr;
+}
+
+root_type Peer;

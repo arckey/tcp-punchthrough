@@ -1,0 +1,27 @@
+namespace request;
+
+table Addr {
+    ip:[byte];
+    port:int;
+}
+
+enum RequestType : byte { Registration = 0, Connection }
+
+table RegistrationRequest {
+    name:string;
+    localAddr:Addr;
+}
+
+table ConnectionRequest {
+    peer:string;
+    requester: string;
+}
+
+union AllRequests {RegistrationRequest, ConnectionRequest}
+
+table Request {
+    type:RequestType;
+    request:AllRequests;
+}
+
+root_type Request; 

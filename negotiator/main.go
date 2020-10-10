@@ -1,69 +1,116 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
+
+	"github.com/arckey/tcp-punchthrough/helpers"
+	"github.com/arckey/tcp-punchthrough/types/peer"
+	"github.com/arckey/tcp-punchthrough/types/request"
+	fb "github.com/google/flatbuffers/go"
 )
 
-var servers = map[string]string{}
+// maps a name of a peer to local and remote address
+var servers = map[string]struct {
+	peer *peer.Peer
+	con  net.Conn
+}{}
 var mut = sync.Mutex{}
 
-func getServer(id string) string {
+func getPeer(id string) (*peer.Peer, net.Conn, bool) {
 	mut.Lock()
 	defer mut.Unlock()
-	return servers[id]
+	p, ok := servers[id]
+	return p.peer, p.con, ok
 }
 
-func addServer(id, address string) {
+func addPeer(id string, p *peer.Peer, con net.Conn) {
 	mut.Lock()
 	defer mut.Unlock()
-	servers[id] = address
+	servers[id] = struct {
+		peer *peer.Peer
+		con  net.Conn
+	}{
+		peer: p,
+		con:  con,
+	}
 }
 
 func handleConnection(con net.Conn) {
-	defer con.Close()
+	buf := make([]byte, 512)
 
-	r := bufio.NewReader(con)
-	data, err := r.ReadString('\n')
-	if err != nil && err != io.EOF {
-		fmt.Printf("failed to read from connection %v, err: %v\n", con.RemoteAddr(), err)
-		return
-	}
-	data = strings.Replace(data, "\n", "", 1)
-	fmt.Printf("received: msg=%v from=%v\n", data, con.RemoteAddr())
-
-	res := strings.Split(data, "=")
-	if len(res) > 1 {
-		remotePort := res[1]
-		remoteAddr := con.RemoteAddr().String()[0:strings.LastIndex(con.RemoteAddr().String(), ":")]
-
-		fmt.Printf("adding server: id=%v port=%v addr=%v\n", res[0], remotePort, remoteAddr)
-		addServer(res[0], fmt.Sprintf("%v:%v", remoteAddr, remotePort))
-		_, err = con.Write([]byte("ok"))
-		if err != nil {
-			fmt.Printf("failed to write to %v, err: %v\n", con.RemoteAddr(), err)
+	for {
+		n, err := con.Read(buf)
+		if err == io.EOF {
+			fmt.Printf("connection closed with %v\n", con.RemoteAddr())
+			con.Close()
 			return
 		}
+		helpers.PanicIfErr("cannot read from connection", err)
+
+		req := request.GetRootAsRequest(buf[:n], 0)
+		reqTable := &fb.Table{}
+		req.Request(reqTable)
+
+		switch req.Type() {
+		case request.RequestTypeRegistration:
+			rr := &request.RegistrationRequest{}
+			rr.Init(reqTable.Bytes, reqTable.Pos)
+			handleRegistrationReq(con, rr)
+		case request.RequestTypeConnection:
+			cr := &request.ConnectionRequest{}
+			cr.Init(reqTable.Bytes, reqTable.Pos)
+			handleConnectionReq(con, cr)
+		}
+	}
+}
+
+func handleRegistrationReq(con net.Conn, r *request.RegistrationRequest) {
+	name := string(r.Name())
+	remoteAddr, err := helpers.StrToAddrV4(con.RemoteAddr().String())
+	if err != nil {
+		fmt.Printf("failed to parse remote address, err: %v\n", err)
+		return
+	}
+	localAddr := helpers.ReqAddrToAddrV4(r.LocalAddr(&request.Addr{}))
+	p := helpers.CreatePeer(name, remoteAddr, localAddr)
+	fmt.Printf("adding new peer: name=%v local=%v remote=%v:%v\n", name, con.RemoteAddr(), localAddr.Addr, localAddr.Port)
+	addPeer(name, p, con)
+
+	_, err = con.Write(p.Table().Bytes)
+	if err != nil {
+		fmt.Printf("failed to send registration details, err: %v\n", err)
+		return
+	}
+}
+
+func handleConnectionReq(con net.Conn, r *request.ConnectionRequest) {
+	requester := string(r.Requester())
+	target := string(r.Peer())
+
+	targetPeer, tpConn, ok := getPeer(target)
+	if !ok {
+		con.Write([]byte{1}) // mark not found
 		return
 	}
 
-	fmt.Printf("requesting server %v\n", res[0])
-	server := getServer(res[0])
-	if server == "" { // no server
-		fmt.Printf("server %v not found, writing response...\n", res[0])
-		con.Write([]byte{0})
+	requesterPeer, _, ok := getPeer(requester)
+	if !ok {
+		con.Write([]byte{2}) // mark not registered yet
 		return
 	}
-	fmt.Printf("found server %v with address %v, sending details to %v\n",
-		res[0], server, con.RemoteAddr())
-	_, err = con.Write([]byte(server))
+
+	_, err := tpConn.Write(requesterPeer.Table().Bytes)
 	if err != nil {
-		fmt.Printf("failed to send server details to %v, err: %v\n", con.RemoteAddr(), err)
+		fmt.Printf("failed to send requester peer details to target peer, err: %v\n", err)
+	}
+
+	_, err = con.Write(targetPeer.Table().Bytes)
+	if err != nil {
+		fmt.Printf("failed to send target peer details to requester, err: %v\n", err)
 	}
 }
 
