@@ -69,27 +69,12 @@ func establishConnectionToPeer(p *peer.Peer) int {
 
 	for failures != 3 {
 		select {
-		case sock, ok := <-acceptChan:
-			if !ok {
-				fmt.Printf("failed to accept connection from %v\n", pname)
-				failures++
-			} else {
-				return sock
-			}
-		case sock, ok := <-connectLocalChan:
-			if !ok {
-				fmt.Printf("failed to connect to %v local address\n", pname)
-				failures++
-			} else {
-				return sock
-			}
-		case sock, ok := <-connectRemoteChan:
-			if !ok {
-				fmt.Printf("failed to connect to %v remote address\n", pname)
-				failures++
-			} else {
-				return sock
-			}
+		case sock := <-acceptChan:
+			return sock
+		case sock := <-connectLocalChan:
+			return sock
+		case sock := <-connectRemoteChan:
+			return sock
 		}
 	}
 
@@ -111,9 +96,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 
 	err = syscall.Connect(sock, addr)
 	if err != nil {
-		fmt.Printf("failed to connect to %v:%v, err: %v\n", addr.Addr, addr.Port, err)
 		syscall.Close(sock)
-		close(res)
 		return
 	}
 	fmt.Printf("succefully connected to %v:%v\n", addr.Addr, addr.Port)
@@ -138,8 +121,6 @@ func attemptAccept(res chan int) {
 
 	peerSock, peerAddr, err := syscall.Accept(sock)
 	if err != nil {
-		fmt.Printf("failed to accept connection from socket, err: %v\n", err)
-		close(res)
 		return
 	}
 	peerAddrV4, _ := peerAddr.(*syscall.SockaddrInet4)
@@ -156,7 +137,7 @@ func requestPeer(sock int, targetPeer string) *peer.Peer {
 	n, err := syscall.Read(sock, buf)
 	PanicIfErr("failed to read peer from server", err)
 	if n == 1 && buf[0] == 1 {
-		panic(fmt.Errorf("peer with name %v was not found\n", targetPeer))
+		panic(fmt.Errorf("peer with name %v was not found", targetPeer))
 	}
 
 	return peer.GetRootAsPeer(buf[:n], 0)
@@ -178,6 +159,9 @@ func acceptIncommingPeer(sock int) {
 			PeerAddrToStr(localAddr),
 			PeerAddrToStr(remoteAddr))
 		peerSock := establishConnectionToPeer(other)
+		if peerSock == -1 {
+			panic(fmt.Errorf("failed to establish connection to peer"))
+		}
 		go handlePeerConnection(peerSock, other)
 	}
 }
