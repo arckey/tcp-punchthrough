@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 
 	. "github.com/arckey/tcp-punchthrough/helpers"
 	"github.com/arckey/tcp-punchthrough/types/peer"
@@ -13,6 +14,11 @@ import (
 var sAddrFlag = flag.String("negotiator-addr", "", "the address of the negotiator server")
 var peerNameFlag = flag.String("name", "", "the peer name, other peers will use it to connect to you")
 var targetNameFlag = flag.String("target", "", "the name of the target peer you want to connect to")
+
+const (
+	connectRetries    = 3
+	connectRetryDelay = 1000 * time.Millisecond
+)
 
 var localPort int
 
@@ -84,8 +90,10 @@ func establishConnectionToPeer(p *peer.Peer) int {
 }
 
 func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
+	defer close(res)
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
+	defer syscall.Close(sock)
 
 	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 	PanicIfErr("failed to configure socket", err)
@@ -95,16 +103,20 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	err = syscall.Bind(sock, &syscall.SockaddrInet4{Port: localPort})
 	PanicIfErr("failed to bind socket", err)
 
-	err = syscall.Connect(sock, addr)
-	if err != nil {
-		syscall.Close(sock)
-		return
+	for i := 0; i < connectRetries; i++ {
+		if err = syscall.Connect(sock, addr); err != nil {
+			fmt.Printf("failed to connect to %v:%v, retry=%v, err=%v\n", addr.Addr, addr.Port, i, err)
+		} else {
+			fmt.Printf("succefully connected to %v:%v\n", addr.Addr, addr.Port)
+			res <- sock
+			return
+		}
+		time.Sleep(connectRetryDelay)
 	}
-	fmt.Printf("succefully connected to %v:%v\n", addr.Addr, addr.Port)
-	res <- sock
 }
 
 func attemptAccept(res chan int) {
+	defer close(res)
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
 	defer syscall.Close(sock)
@@ -120,8 +132,10 @@ func attemptAccept(res chan int) {
 	err = syscall.Listen(sock, 10)
 	PanicIfErr("failed to listen with socket", err)
 
+	fmt.Printf("listening for incomming connections on port %v\n", localPort)
 	peerSock, peerAddr, err := syscall.Accept(sock)
 	if err != nil {
+		fmt.Printf("failed to accept connection, err: %v\n", err)
 		return
 	}
 	peerAddrV4, _ := peerAddr.(*syscall.SockaddrInet4)
