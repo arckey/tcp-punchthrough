@@ -53,6 +53,7 @@ func chatWithPeer(sock int, p *peer.Peer) {
 }
 
 func establishConnectionToPeer(p *peer.Peer) int {
+	fmt.Printf("trying to establish connection to: %v\n", string(p.Name()))
 	acceptChan := make(chan int)
 	connectLocalChan := make(chan int)
 	connectRemoteChan := make(chan int)

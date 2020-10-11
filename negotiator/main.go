@@ -91,23 +91,29 @@ func handleConnectionReq(con net.Conn, r *request.ConnectionRequest) {
 	requester := string(r.Requester())
 	target := string(r.Peer())
 
+	fmt.Printf("get connection request: from=%v to=%v\n", requester, target)
+
 	targetPeer, tpConn, ok := getPeer(target)
 	if !ok {
+		fmt.Printf("target peer does not exist: peer=%v\n", target)
 		con.Write([]byte{1}) // mark not found
 		return
 	}
 
 	requesterPeer, _, ok := getPeer(requester)
 	if !ok {
+		fmt.Printf("requester is not registered: peer=%v\n", requester)
 		con.Write([]byte{2}) // mark not registered yet
 		return
 	}
 
+	fmt.Printf("sending details to target peer: peer=%v\n", target)
 	_, err := tpConn.Write(requesterPeer.Table().Bytes)
 	if err != nil {
 		fmt.Printf("failed to send requester peer details to target peer, err: %v\n", err)
 	}
 
+	fmt.Printf("sending details to requester peer: peer=%v\n", requester)
 	_, err = con.Write(targetPeer.Table().Bytes)
 	if err != nil {
 		fmt.Printf("failed to send target peer details to requester, err: %v\n", err)
