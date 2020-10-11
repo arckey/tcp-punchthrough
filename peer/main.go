@@ -43,7 +43,7 @@ func main() {
 func chatWithPeer(sock int, p *peer.Peer) {
 	buf := make([]byte, 256)
 	pname := string(p.Name())
-	fmt.Printf("connected to: %v\n", pname)
+	fmt.Printf("connected to: %v, sock=%v\n", pname, sock)
 	for {
 		fmt.Printf("[msg:] ")
 		n, err := os.Stdin.Read(buf)
@@ -107,7 +107,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	err = syscall.Bind(sock, &syscall.SockaddrInet4{Port: localPort})
 	PanicIfErr("failed to bind socket", err)
 
-	fmt.Printf("attempting to connect to %v:%v retries=%v sock=%v", addr.Addr, addr.Port, connectRetries, sock)
+	fmt.Printf("attempting to connect to %v:%v retries=%v sock=%v\n", addr.Addr, addr.Port, connectRetries, sock)
 	for i := 0; i < connectRetries; i++ {
 		if err = syscall.Connect(sock, addr); err != nil {
 			fmt.Printf("failed to connect to %v:%v, retry=%v, err=%v\n", addr.Addr, addr.Port, i, err)
