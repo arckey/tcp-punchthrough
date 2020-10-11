@@ -26,11 +26,11 @@ func (rcv *Addr) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *Addr) Ip(j int) int8 {
+func (rcv *Addr) Ip(j int) byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
-		return rcv._tab.GetInt8(a + flatbuffers.UOffsetT(j*1))
+		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
 	}
 	return 0
 }
@@ -43,11 +43,19 @@ func (rcv *Addr) IpLength() int {
 	return 0
 }
 
-func (rcv *Addr) MutateIp(j int, n int8) bool {
+func (rcv *Addr) IpBytes() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
+func (rcv *Addr) MutateIp(j int, n byte) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
-		return rcv._tab.MutateInt8(a+flatbuffers.UOffsetT(j*1), n)
+		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
 	}
 	return false
 }

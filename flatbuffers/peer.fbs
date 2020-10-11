@@ -1,7 +1,7 @@
 namespace peer;
 
 table Addr {
-    ip:[byte];
+    ip:[ubyte];
     port:int;
 }
 

@@ -1,7 +1,7 @@
 namespace request;
 
 table Addr {
-    ip:[byte];
+    ip:[ubyte];
     port:int;
 }
 
