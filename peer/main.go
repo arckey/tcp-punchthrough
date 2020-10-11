@@ -16,8 +16,9 @@ var peerNameFlag = flag.String("name", "", "the peer name, other peers will use 
 var targetNameFlag = flag.String("target", "", "the name of the target peer you want to connect to")
 
 const (
-	connectRetries    = 3
-	connectRetryDelay = 1000 * time.Millisecond
+	connectRetries       = 6
+	connectRetryDelay    = 1000 * time.Millisecond
+	establishConnTimeout = 10 * time.Second
 )
 
 var localPort int
@@ -73,7 +74,7 @@ func establishConnectionToPeer(p *peer.Peer) int {
 	go attemptConnect(remoteAddr, connectRemoteChan)
 
 	failures := 0
-
+	tout := time.After(establishConnTimeout)
 	for failures != 3 {
 		select {
 		case sock := <-acceptChan:
@@ -82,6 +83,9 @@ func establishConnectionToPeer(p *peer.Peer) int {
 			return sock
 		case sock := <-connectRemoteChan:
 			return sock
+		case <-tout:
+			fmt.Println("timeout reached")
+			return -1
 		}
 	}
 
@@ -103,6 +107,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	err = syscall.Bind(sock, &syscall.SockaddrInet4{Port: localPort})
 	PanicIfErr("failed to bind socket", err)
 
+	fmt.Printf("attempting to connect to %v:%v retries=%v sock=%v", addr.Addr, addr.Port, connectRetries, sock)
 	for i := 0; i < connectRetries; i++ {
 		if err = syscall.Connect(sock, addr); err != nil {
 			fmt.Printf("failed to connect to %v:%v, retry=%v, err=%v\n", addr.Addr, addr.Port, i, err)
@@ -132,7 +137,7 @@ func attemptAccept(res chan int) {
 	err = syscall.Listen(sock, 10)
 	PanicIfErr("failed to listen with socket", err)
 
-	fmt.Printf("listening for incomming connections on port %v\n", localPort)
+	fmt.Printf("listening for incomming connections on port %v, sock=%v\n", localPort, sock)
 	peerSock, peerAddr, err := syscall.Accept(sock)
 	if err != nil {
 		fmt.Printf("failed to accept connection, err: %v\n", err)
