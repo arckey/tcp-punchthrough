@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/peer/main.go",
-            "args": ["--negotiator-addr", "127.0.0.1:8080","--name", "roi"]
+            "args": ["--negotiator-addr", "35.233.110.224:80","--name", "roi"]
         },
         {
             "name": "Negotiator",

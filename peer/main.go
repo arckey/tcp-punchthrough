@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"syscall"
 	"time"
@@ -18,7 +19,7 @@ var targetNameFlag = flag.String("target", "", "the name of the target peer you 
 const (
 	connectRetries       = 6
 	connectRetryDelay    = 1000 * time.Millisecond
-	establishConnTimeout = 10 * time.Second
+	establishConnTimeout = 30 * time.Second
 )
 
 var localPort int
@@ -67,10 +68,10 @@ func establishConnectionToPeer(p *peer.Peer) int {
 
 	pname := string(p.Name())
 	remoteAddr := PeerAddrToAddrV4(p.RemoteAddr(&peer.Addr{}))
-	localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
+	// localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
 
 	go attemptAccept(acceptChan)
-	go attemptConnect(localAddr, connectLocalChan)
+	// go attemptConnect(localAddr, connectLocalChan)
 	go attemptConnect(remoteAddr, connectRemoteChan)
 
 	failures := 0
@@ -94,7 +95,6 @@ func establishConnectionToPeer(p *peer.Peer) int {
 }
 
 func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
-	defer close(res)
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
 	defer syscall.Close(sock)
@@ -104,7 +104,9 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
 	PanicIfErr("failed to configure socket", err)
 
-	err = syscall.Bind(sock, &syscall.SockaddrInet4{Port: localPort})
+	sa := &syscall.SockaddrInet4{Port: localPort}
+	copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
+	err = syscall.Bind(sock, sa)
 	PanicIfErr("failed to bind socket", err)
 
 	fmt.Printf("attempting to connect to %v:%v retries=%v sock=%v\n", addr.Addr, addr.Port, connectRetries, sock)
@@ -121,7 +123,6 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 }
 
 func attemptAccept(res chan int) {
-	defer close(res)
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
 	defer syscall.Close(sock)
@@ -131,7 +132,9 @@ func attemptAccept(res chan int) {
 	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
 	PanicIfErr("failed to configure socket", err)
 
-	err = syscall.Bind(sock, &syscall.SockaddrInet4{Port: localPort})
+	sa := &syscall.SockaddrInet4{Port: localPort}
+	copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
+	err = syscall.Bind(sock, sa)
 	PanicIfErr("failed to bind socket", err)
 
 	err = syscall.Listen(sock, 10)
