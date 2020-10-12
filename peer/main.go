@@ -99,7 +99,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	tagain := time.After(connectRetryDelay)
 
 	tryAgain := func(addr *syscall.SockaddrInet4, res chan int, try int) {
-		sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+		sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 		PanicIfErr("failed to create socket", err)
 		defer syscall.Close(sock)
 
@@ -135,7 +135,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 }
 
 func attemptAccept(res chan int) {
-	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
 	defer syscall.Close(sock)
 
@@ -223,7 +223,7 @@ func handlePeerConnection(peerSock int, p *peer.Peer) {
 
 func connectToNegotiatorServer() int {
 	buf := make([]byte, 512)
-	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
 
 	err = ConfigureSocket(sock)
