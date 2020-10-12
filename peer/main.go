@@ -19,7 +19,7 @@ var targetNameFlag = flag.String("target", "", "the name of the target peer you 
 const (
 	connectRetries       = 6
 	connectRetryDelay    = 1000 * time.Millisecond
-	establishConnTimeout = 30 * time.Second
+	establishConnTimeout = 300 * time.Second
 )
 
 var localPort int
@@ -68,10 +68,10 @@ func establishConnectionToPeer(p *peer.Peer) int {
 
 	pname := string(p.Name())
 	remoteAddr := PeerAddrToAddrV4(p.RemoteAddr(&peer.Addr{}))
-	// localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
+	localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
 
 	go attemptAccept(acceptChan)
-	// go attemptConnect(localAddr, connectLocalChan)
+	go attemptConnect(localAddr, connectLocalChan)
 	go attemptConnect(remoteAddr, connectRemoteChan)
 
 	failures := 0
@@ -99,9 +99,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	PanicIfErr("failed to create socket", err)
 	defer syscall.Close(sock)
 
-	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-	PanicIfErr("failed to configure socket", err)
-	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+	err = ConfigureSocket(sock)
 	PanicIfErr("failed to configure socket", err)
 
 	sa := &syscall.SockaddrInet4{Port: localPort}
@@ -127,9 +125,7 @@ func attemptAccept(res chan int) {
 	PanicIfErr("failed to create socket", err)
 	defer syscall.Close(sock)
 
-	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-	PanicIfErr("failed to configure socket", err)
-	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+	err = ConfigureSocket(sock)
 	PanicIfErr("failed to configure socket", err)
 
 	sa := &syscall.SockaddrInet4{Port: localPort}
@@ -216,9 +212,7 @@ func connectToNegotiatorServer() int {
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
 
-	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-	PanicIfErr("failed to configure socket", err)
-	err = syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+	err = ConfigureSocket(sock)
 	PanicIfErr("failed to configure socket", err)
 
 	err = syscall.Bind(sock, &syscall.SockaddrInet4{})

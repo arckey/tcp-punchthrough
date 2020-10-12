@@ -19,6 +19,15 @@ func PanicIfErr(msg string, err error) {
 	panic(fmt.Errorf("%v, err: %v", msg, err))
 }
 
+func ConfigureSocket(sock int) error {
+	for opt := range sockOpts {
+		if err := syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, opt, 1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func StrToAddrV4(addr string) (*syscall.SockaddrInet4, error) {
 	parts := strings.Split(addr, ":")
 	if len(parts) < 2 {
