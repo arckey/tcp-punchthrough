@@ -8,4 +8,5 @@ var sockOpts = [...]int{
 	syscall.IP_TTL,
 	syscall.TCP_CONNECTIONTIMEOUT,
 	syscall.TCP_NODELAY,
+	syscall.SO_SNDTIMEO,
 }
