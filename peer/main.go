@@ -33,6 +33,7 @@ func main() {
 		acceptIncommingPeer(sock)
 	} else {
 		p := requestPeer(sock, *targetNameFlag)
+		syscall.Close(sock)
 		s := establishConnectionToPeer(p)
 		if s == -1 {
 			panic(fmt.Errorf("failed to establish connection to peer"))
@@ -191,6 +192,7 @@ func acceptIncommingPeer(sock int) {
 			name,
 			PeerAddrToStr(localAddr),
 			PeerAddrToStr(remoteAddr))
+		syscall.Close(sock)
 		peerSock := establishConnectionToPeer(other)
 		if peerSock == -1 {
 			panic(fmt.Errorf("failed to establish connection to peer"))
