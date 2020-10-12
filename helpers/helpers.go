@@ -20,7 +20,7 @@ func PanicIfErr(msg string, err error) {
 }
 
 func ConfigureSocket(sock int) error {
-	for opt := range sockOpts {
+	for _, opt := range sockOpts {
 		if err := syscall.SetsockoptInt(sock, syscall.SOL_SOCKET, opt, 1); err != nil {
 			return err
 		}
