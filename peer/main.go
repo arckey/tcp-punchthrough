@@ -17,8 +17,8 @@ var peerNameFlag = flag.String("name", "", "the peer name, other peers will use 
 var targetNameFlag = flag.String("target", "", "the name of the target peer you want to connect to")
 
 const (
-	connectRetries       = 6
-	connectRetryDelay    = 1000 * time.Millisecond
+	connectRetries       = 7
+	connectRetryDelay    = 3000 * time.Millisecond
 	establishConnTimeout = 300 * time.Second
 )
 
@@ -95,28 +95,42 @@ func establishConnectionToPeer(p *peer.Peer) int {
 }
 
 func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
-	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
-	PanicIfErr("failed to create socket", err)
-	defer syscall.Close(sock)
+	conChan := make(chan int)
+	tagain := time.After(connectRetryDelay)
 
-	err = ConfigureSocket(sock)
-	PanicIfErr("failed to configure socket", err)
+	tryAgain := func(addr *syscall.SockaddrInet4, res chan int, try int) {
+		sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+		PanicIfErr("failed to create socket", err)
+		defer syscall.Close(sock)
 
-	sa := &syscall.SockaddrInet4{Port: localPort}
-	copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
-	err = syscall.Bind(sock, sa)
-	PanicIfErr("failed to bind socket", err)
+		err = ConfigureSocket(sock)
+		PanicIfErr("failed to configure socket", err)
 
-	fmt.Printf("attempting to connect to %v:%v retries=%v sock=%v\n", addr.Addr, addr.Port, connectRetries, sock)
-	for i := 0; i < connectRetries; i++ {
+		sa := &syscall.SockaddrInet4{Port: localPort}
+		copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
+		err = syscall.Bind(sock, sa)
+		PanicIfErr("failed to bind socket", err)
+
+		fmt.Printf("attempting to connect to %v:%v retry=%v sock=%v\n", addr.Addr, addr.Port, try, sock)
 		if err = syscall.Connect(sock, addr); err != nil {
-			fmt.Printf("failed to connect to %v:%v, retry=%v, err=%v\n", addr.Addr, addr.Port, i, err)
+			fmt.Printf("failed to connect to %v:%v, retry=%v, err=%v\n", addr.Addr, addr.Port, try, err)
 		} else {
 			fmt.Printf("succefully connected to %v:%v\n", addr.Addr, addr.Port)
 			res <- sock
 			return
 		}
-		time.Sleep(connectRetryDelay)
+	}
+
+	go tryAgain(addr, conChan, 0)
+
+	for i := 1; i < connectRetries; i++ {
+		select {
+		case successSock := <-conChan:
+			res <- successSock
+			return
+		case <-tagain:
+			go tryAgain(addr, conChan, i)
+		}
 	}
 }
 
