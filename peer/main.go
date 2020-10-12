@@ -96,7 +96,6 @@ func establishConnectionToPeer(p *peer.Peer) int {
 
 func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	conChan := make(chan int)
-	tagain := time.After(connectRetryDelay)
 
 	tryAgain := func(addr *syscall.SockaddrInet4, res chan int, try int) {
 		sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
@@ -124,6 +123,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	go tryAgain(addr, conChan, 0)
 
 	for i := 1; i < connectRetries; i++ {
+		tagain := time.After(connectRetryDelay)
 		select {
 		case successSock := <-conChan:
 			res <- successSock
