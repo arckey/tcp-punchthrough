@@ -17,8 +17,8 @@ var peerNameFlag = flag.String("name", "", "the peer name, other peers will use 
 var targetNameFlag = flag.String("target", "", "the name of the target peer you want to connect to")
 
 const (
-	connectRetries       = 7
-	connectRetryDelay    = 3000 * time.Millisecond
+	connectRetries       = 3
+	connectRetryDelay    = 2000 * time.Millisecond
 	establishConnTimeout = 300 * time.Second
 )
 
@@ -72,6 +72,7 @@ func establishConnectionToPeer(p *peer.Peer) int {
 	// localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
 
 	go attemptAccept(acceptChan)
+	time.Sleep(time.Second * 1) // wait one second
 	// go attemptConnect(localAddr, connectLocalChan)
 	go attemptConnect(remoteAddr, connectRemoteChan)
 
@@ -95,24 +96,33 @@ func establishConnectionToPeer(p *peer.Peer) int {
 	return -1
 }
 
+func makeSock(localPort int) int {
+	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
+	PanicIfErr("failed to create socket", err)
+	defer syscall.Close(sock)
+
+	err = ConfigureSocket(sock)
+	PanicIfErr("failed to configure socket", err)
+
+	sa := &syscall.SockaddrInet4{Port: localPort}
+	copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
+	err = syscall.Bind(sock, sa)
+	PanicIfErr("failed to bind socket", err)
+
+	return sock
+}
+
 func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	conChan := make(chan int)
+	socks := make([]int, connectRetries)
 
-	tryAgain := func(addr *syscall.SockaddrInet4, res chan int, try int) {
-		sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
-		PanicIfErr("failed to create socket", err)
-		defer syscall.Close(sock)
+	for i := range socks {
+		socks[i] = makeSock(localPort)
+	}
 
-		err = ConfigureSocket(sock)
-		PanicIfErr("failed to configure socket", err)
-
-		sa := &syscall.SockaddrInet4{Port: localPort}
-		copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
-		err = syscall.Bind(sock, sa)
-		PanicIfErr("failed to bind socket", err)
-
+	tryAgain := func(addr *syscall.SockaddrInet4, res chan int, try, sock int) {
 		fmt.Printf("attempting to connect to %v:%v retry=%v sock=%v\n", addr.Addr, addr.Port, try, sock)
-		if err = syscall.Connect(sock, addr); err != nil {
+		if err := syscall.Connect(sock, addr); err != nil {
 			fmt.Printf("failed to connect to %v:%v, retry=%v, err=%v\n", addr.Addr, addr.Port, try, err)
 		} else {
 			fmt.Printf("succefully connected to %v:%v\n", addr.Addr, addr.Port)
@@ -121,7 +131,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 		}
 	}
 
-	go tryAgain(addr, conChan, 0)
+	go tryAgain(addr, conChan, 0, socks[0])
 
 	for i := 1; i < connectRetries; i++ {
 		tagain := time.After(connectRetryDelay)
@@ -130,7 +140,7 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 			res <- successSock
 			return
 		case <-tagain:
-			go tryAgain(addr, conChan, i)
+			go tryAgain(addr, conChan, i, socks[i])
 		}
 	}
 }
