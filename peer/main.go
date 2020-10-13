@@ -68,11 +68,11 @@ func establishConnectionToPeer(p *peer.Peer) int {
 
 	pname := string(p.Name())
 	remoteAddr := PeerAddrToAddrV4(p.RemoteAddr(&peer.Addr{}))
-	// localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
+	localAddr := PeerAddrToAddrV4(p.LocalAddr(&peer.Addr{}))
 
 	go attemptAccept(acceptChan)
 	time.Sleep(time.Second * 1) // wait one second
-	// go attemptConnect(localAddr, connectLocalChan)
+	go attemptConnect(localAddr, connectLocalChan)
 	go attemptConnect(remoteAddr, connectRemoteChan)
 
 	failures := 0
