@@ -33,7 +33,6 @@ func main() {
 		acceptIncommingPeer(sock)
 	} else {
 		p := requestPeer(sock, *targetNameFlag)
-		syscall.Close(sock)
 		s := establishConnectionToPeer(p)
 		if s == -1 {
 			panic(fmt.Errorf("failed to establish connection to peer"))
@@ -99,14 +98,11 @@ func establishConnectionToPeer(p *peer.Peer) int {
 func makeSock(localPort int) int {
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
-	defer syscall.Close(sock)
 
 	err = ConfigureSocket(sock)
 	PanicIfErr("failed to configure socket", err)
 
-	sa := &syscall.SockaddrInet4{Port: localPort}
-	copy(sa.Addr[:], net.ParseIP("0.0.0.0"))
-	err = syscall.Bind(sock, sa)
+	err = syscall.Bind(sock, &syscall.SockaddrInet4{Port: localPort})
 	PanicIfErr("failed to bind socket", err)
 
 	return sock
@@ -117,7 +113,9 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 	socks := make([]int, connectRetries)
 
 	for i := range socks {
-		socks[i] = makeSock(localPort)
+		sock := makeSock(localPort)
+		fmt.Printf("creating socket: sock=%v\n", sock)
+		socks[i] = sock
 	}
 
 	tryAgain := func(addr *syscall.SockaddrInet4, res chan int, try, sock int) {
@@ -148,7 +146,6 @@ func attemptConnect(addr *syscall.SockaddrInet4, res chan int) {
 func attemptAccept(res chan int) {
 	sock, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_IP)
 	PanicIfErr("failed to create socket", err)
-	defer syscall.Close(sock)
 
 	err = ConfigureSocket(sock)
 	PanicIfErr("failed to configure socket", err)
@@ -202,7 +199,6 @@ func acceptIncommingPeer(sock int) {
 			name,
 			PeerAddrToStr(localAddr),
 			PeerAddrToStr(remoteAddr))
-		syscall.Close(sock)
 		peerSock := establishConnectionToPeer(other)
 		if peerSock == -1 {
 			panic(fmt.Errorf("failed to establish connection to peer"))
@@ -212,7 +208,6 @@ func acceptIncommingPeer(sock int) {
 }
 
 func handlePeerConnection(peerSock int, p *peer.Peer) {
-	defer syscall.Close(peerSock)
 	buf := make([]byte, 512)
 	pname := string(p.Name())
 
